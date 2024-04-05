@@ -9,7 +9,41 @@ class MyXchangeClient(xchange_client.XChangeClient):
 
     def __init__(self, host: str, username: str, password: str):
         super().__init__(host, username, password)
-        self.log = []
+
+        self.fair_values = {}
+        self.symbols = xchange_client.SYMBOLS
+        for s in self.symbols:
+            self.fair_values[s] = None
+            # update this later to whatever we think is the ending fair value
+        
+        # keep track of the order book excluding our open orders
+        self.book_other = self.order_books.copy()
+        # desired orders to have
+        self.desired_orders = {} 
+
+    async def compute_desired_orders(self): 
+        self.book_other = self.order_books.copy()
+        for order in self.open_orders.values():
+            order_request, qty, is_market = order
+            if not is_market:
+                continue
+            symbol = order_request.symbol
+            side = order_request.side
+            px = order_request.limit.price
+            qty = order_request.limit.qty
+
+            if side == xchange_client.Side.BUY:
+                self.book_other[symbol].bids[px] -= qty
+            elif side == xchange_client.Side.SELL:
+                self.book_other[symbol].asks[px] -= qty
+
+        await asyncio.sleep(1)
+        for security, book in self.order_books.items():
+            sorted_bids = sorted((k,v) for k,v in book.bids.items() if v != 0)
+            sorted_asks = sorted((k,v) for k,v in book.asks.items() if v != 0)
+            print(f"Bids for {security}:\n{sorted_bids}")
+            print(f"Asks for {security}:\n{sorted_asks}")
+
 
     async def bot_handle_cancel_response(self, order_id: str, success: bool, error: Optional[str]) -> None:
         order = self.open_orders[order_id]
@@ -28,6 +62,7 @@ class MyXchangeClient(xchange_client.XChangeClient):
 
     async def bot_handle_book_update(self, symbol: str) -> None:
         # print("book update")
+        await self.compute_desired_orders()
         pass
 
     async def bot_handle_swap_response(self, swap: str, qty: int, success: bool):
@@ -82,8 +117,8 @@ class MyXchangeClient(xchange_client.XChangeClient):
         Creates tasks that can be run in the background. Then connects to the exchange
         and listens for messages.
         """
-        # asyncio.create_task(self.trade())
-        asyncio.create_task(self.view_books())
+        asyncio.create_task(self.trade())
+        # asyncio.create_task(self.view_books())
         await self.connect()
 
 
