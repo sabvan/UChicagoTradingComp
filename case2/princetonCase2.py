@@ -51,19 +51,21 @@ class Allocator():
                 Flatten(),
                 Dense(outputs, activation='tanh')
             ])
+            
+            
 
-        def sharpe_loss(_, y_pred):
-            # make all time-series start at 1
-            data = tf.divide(self.data, self.data[0])  
-            
-            # value of the portfolio after allocations applied
-            portfolio_values = tf.reduce_sum(tf.multiply(data, y_pred), axis=1) 
-            portfolio_returns = (portfolio_values[1:] - portfolio_values[:-1]) / portfolio_values[:-1]  # % change formula
-            sharpe = K.mean(portfolio_returns) / K.std(portfolio_returns)
-            
-            # since we want to maximize Sharpe, while gradient descent minimizes the loss, 
-            #   we can negate Sharpe (the min of a negated function is its max)
-            return -sharpe
+            def sharpe_loss(_, y_pred):
+                # make all time-series start at 1
+                data = tf.divide(self.data, self.data[0])  
+                
+                # value of the portfolio after allocations applied
+                portfolio_values = tf.reduce_sum(tf.multiply(data, y_pred), axis=1) 
+                portfolio_returns = (portfolio_values[1:] - portfolio_values[:-1]) / portfolio_values[:-1]  # % change formula
+                sharpe = K.mean(portfolio_returns) / K.std(portfolio_returns)
+                
+                # since we want to maximize Sharpe, while gradient descent minimizes the loss, 
+                #   we can negate Sharpe (the min of a negated function is its max)
+                return -sharpe
             
             model.compile(loss=sharpe_loss, optimizer='adam')
             return model
