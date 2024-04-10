@@ -1,8 +1,12 @@
+1. RL 
+2. Markov Chains
+3. Markowitz optimization
+
+
 Rl method
  - states are different weights 
  - rewards are based on return, risk, and Sharpe ratio
  - 
-
 
 Markov Chains?
  - model transitions between returns
@@ -31,3 +35,12 @@ run model on new data!!
 beta stock 
 pederman 
 granelau
+
+
+steven boyd markowitz
+tune weights with markotiz at 70 with machine learning
+multi period portfollio training
+
+represent optimization problems as layer
+neural networks 
+backtesting
