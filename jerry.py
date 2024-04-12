@@ -1,9 +1,8 @@
 from typing import Optional
-import pickle
-import time
 
 from xchangelib import xchange_client
 import asyncio
+import copy 
 
 class MyXchangeClient(xchange_client.XChangeClient):
     '''A shell client with the methods that can be implemented to interact with the xchange.'''
@@ -18,12 +17,16 @@ class MyXchangeClient(xchange_client.XChangeClient):
 
     def __init__(self, host: str, username: str, password: str):
         super().__init__(host, username, password)
+        
         self.symbols = xchange_client.SYMBOLS
+        self.fade = {}
+        
         self.fair_values = {}
         self.state = {}
         for symbol in self.symbols:
             self.fair_values[symbol] = 5000
             self.state[symbol] = {}
+            self.fade[symbol] = 0
 
         self.etfs = ['SCP', 'JAK']
         self.etf_weights = [
@@ -37,23 +40,22 @@ class MyXchangeClient(xchange_client.XChangeClient):
 
     def update_state(self): 
         # await asyncio.sleep(0.01)
-        self.book_other = self.order_books
-        
-        '''
+        self.book_other = copy.deepcopy(self.order_books)
+        print(self.open_orders)
         for order in self.open_orders.values():
             order_request, qty, is_market = order
             if is_market:
                 continue
             symbol = order_request.symbol
             side = order_request.side
-            px = order_request.limit.price
+            # print(order_request.limit)
+            px = order_request.limit.px
             qty = order_request.limit.qty
 
             if side == xchange_client.Side.BUY:
                 self.book_other[symbol].bids[px] -= qty
             elif side == xchange_client.Side.SELL:
                 self.book_other[symbol].asks[px] -= qty
-        '''
 
         for security, book in self.book_other.items():
             sorted_bids = sorted((k,v) for k,v in book.bids.items() if v != 0)
@@ -67,11 +69,37 @@ class MyXchangeClient(xchange_client.XChangeClient):
                 }
         self.compute_etf_fv()
         return 
+    
+    def compute_fade(self):
+        for security, pos in self.positions.items():
+            if security == 'cash':
+                continue
+            self.fade[security] = pos
+
+    async def market_making(self):
+        await self.clear_pos()
+        while True: 
+            await asyncio.sleep(0.1)
+            self.update_state()
+            self.compute_fade()
+            for symbol in self.symbols:
+                if self.state[symbol] == {}:
+                    continue
+                if symbol in ['SCP', 'JMS', 'JAK']:
+                    continue
+                bb = self.state[symbol]['best_bid'][0]
+                ba = self.state[symbol]['best_ask'][0]
+                if ba - bb > 2:
+                    print(bb, ba)
+                    await self.place_order(symbol, 1, xchange_client.Side.BUY, bb+1-self.fade[symbol])
+                    await self.place_order(symbol, 1, xchange_client.Side.SELL, ba-1-self.fade[symbol])
+               
             
+
     async def arbitrage(self):
         await self.clear_pos()
         while True:
-            await asyncio.sleep(0.1)
+            await asyncio.sleep(0.05)
             
             flag = 0
             for security, pos in self.positions.items():
@@ -81,9 +109,8 @@ class MyXchangeClient(xchange_client.XChangeClient):
                     flag = 1
             if flag:
                 await self.clear_pos()
-            
 
-            # self.update_state()
+
             for security, book in self.order_books.items():
                 sorted_bids = sorted((k,v) for k,v in book.bids.items() if v != 0)
                 sorted_asks = sorted((k,v) for k,v in book.asks.items() if v != 0)
@@ -108,10 +135,11 @@ class MyXchangeClient(xchange_client.XChangeClient):
             if flag == 1:
                 continue
 
-            '''
+            
             create_arb_SCP = 10 * self.state['SCP']['best_bid'][0] - 3 * self.state['EPT']['best_ask'][0] - 3 * self.state['IGM']['best_ask'][0] - 4 * self.state['BRV']['best_ask'][0] 
-            # vol = min(self.state['EPT']['best_ask'][1]//3, self.state['IGM']['best_ask'][1]//3, self.state['BRV']['best_ask'][1]//4, self.state['SCP']['best_bid'][1]//10)
-            vol = 1
+            vol = min(self.state['EPT']['best_ask'][1]//3, self.state['IGM']['best_ask'][1]//3, self.state['BRV']['best_ask'][1]//4, self.state['SCP']['best_bid'][1]//10)
+            vol = min(vol, 10)
+            # vol = 1
 
             if create_arb_SCP > 0:
                 await self.place_swap_order('toSCP', vol)
@@ -120,8 +148,9 @@ class MyXchangeClient(xchange_client.XChangeClient):
                 await self.place_order('BRV', 4 * vol, xchange_client.Side.BUY)
                 await self.place_order('SCP', 10 * vol, xchange_client.Side.SELL)
 
-            redeem_arb_SCP = 3 * self.state['EPT']['best_bid'][0] - 3 * self.state['IGM']['best_bid'][0] - 4 * self.state['BRV']['best_bid'][0] - 10 * self.state['SCP']['best_ask'][0]
-            # vol = min(self.state['EPT']['best_bid'][1]//3, self.state['IGM']['best_bid'][1]//3, self.state['BRV']['best_bid'][1]//4, self.state['SCP']['best_ask'][1]//10)
+            redeem_arb_SCP = 3 * self.state['EPT']['best_bid'][0] + 3 * self.state['IGM']['best_bid'][0] + 4 * self.state['BRV']['best_bid'][0] - 10 * self.state['SCP']['best_ask'][0]
+            vol = min(self.state['EPT']['best_bid'][1]//3, self.state['IGM']['best_bid'][1]//3, self.state['BRV']['best_bid'][1]//4, self.state['SCP']['best_ask'][1]//10)
+            vol = min(vol, 10)
             # vol = 1
             if redeem_arb_SCP > 0:
                 await self.place_swap_order('fromSCP', vol)
@@ -129,10 +158,12 @@ class MyXchangeClient(xchange_client.XChangeClient):
                 await self.place_order('IGM', 3 * vol, xchange_client.Side.SELL)
                 await self.place_order('BRV', 4 * vol, xchange_client.Side.SELL)
                 await self.place_order('SCP', 10 * vol, xchange_client.Side.BUY)
-            '''
-            vol = 1
             
+
+            # vol = 1
             create_arb_JAK = 10 * self.state['JAK']['best_bid'][0] - 2 * self.state['EPT']['best_ask'][0] - 5 * self.state['DLO']['best_ask'][0] - 3 * self.state['MKU']['best_ask'][0]
+            vol = min(self.state['JAK']['best_bid'][1]//10, self.state['EPT']['best_ask'][1]//2, self.state['DLO']['best_ask'][1]//5, self.state['MKU']['best_ask'][1]//3)
+            vol = min(vol, 10)
             # print(create_arb_JAK)
             if create_arb_JAK > 0:
                 await self.place_swap_order('toJAK', vol)
@@ -143,6 +174,8 @@ class MyXchangeClient(xchange_client.XChangeClient):
             
 
             redeem_arb_JAK = -10 * self.state['JAK']['best_ask'][0] + 2 * self.state['EPT']['best_bid'][0] + 5 * self.state['DLO']['best_bid'][0] + 3 * self.state['MKU']['best_bid'][0]
+            vol = min(self.state['JAK']['best_ask'][1]//10, self.state['EPT']['best_bid'][1]//2, self.state['DLO']['best_bid'][1]//5, self.state['MKU']['best_bid'][1]//3)
+            vol = min(vol, 10)
             # print(redeem_arb_JAK)
             if redeem_arb_JAK > 0:
                 await self.place_swap_order('fromJAK', vol)
@@ -151,7 +184,7 @@ class MyXchangeClient(xchange_client.XChangeClient):
                 await self.place_order('DLO', 5 * vol, xchange_client.Side.SELL)
                 await self.place_order('MKU', 3 * vol, xchange_client.Side.SELL)
 
-            print(create_arb_JAK, redeem_arb_JAK)
+            print(create_arb_SCP, redeem_arb_SCP, create_arb_JAK, redeem_arb_JAK)
             
             
 
@@ -250,11 +283,9 @@ class MyXchangeClient(xchange_client.XChangeClient):
         Creates tasks that can be run in the background. Then connects to the exchange
         and listens for messages.
         """
-        # asyncio.create_task(self.trade())
-        # asyncio.create_task(self.view_books())
-        # asyncio.create_task(self.update_state())
-        # asyncio.create_task(self.clear_pos())
-        asyncio.create_task(self.arbitrage())
+        
+        # asyncio.create_task(self.arbitrage())
+        asyncio.create_task(self.market_making())
         await self.connect()
 
 
