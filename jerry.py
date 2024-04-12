@@ -105,7 +105,7 @@ class MyXchangeClient(xchange_client.XChangeClient):
             for security, pos in self.positions.items():
                 if security == 'cash':
                     continue
-                if abs(pos) >= 100:
+                if abs(pos) >= 50:
                     flag = 1
             if flag:
                 await self.clear_pos()
@@ -138,7 +138,9 @@ class MyXchangeClient(xchange_client.XChangeClient):
             
             create_arb_SCP = 10 * self.state['SCP']['best_bid'][0] - 3 * self.state['EPT']['best_ask'][0] - 3 * self.state['IGM']['best_ask'][0] - 4 * self.state['BRV']['best_ask'][0] 
             vol = min(self.state['EPT']['best_ask'][1]//3, self.state['IGM']['best_ask'][1]//3, self.state['BRV']['best_ask'][1]//4, self.state['SCP']['best_bid'][1]//10)
-            vol = min(vol, 10)
+            vol = min(vol, 5)
+            if vol < 0: 
+                print("vol is negative", vol)
             # vol = 1
 
             if create_arb_SCP > 0:
@@ -150,7 +152,9 @@ class MyXchangeClient(xchange_client.XChangeClient):
 
             redeem_arb_SCP = 3 * self.state['EPT']['best_bid'][0] + 3 * self.state['IGM']['best_bid'][0] + 4 * self.state['BRV']['best_bid'][0] - 10 * self.state['SCP']['best_ask'][0]
             vol = min(self.state['EPT']['best_bid'][1]//3, self.state['IGM']['best_bid'][1]//3, self.state['BRV']['best_bid'][1]//4, self.state['SCP']['best_ask'][1]//10)
-            vol = min(vol, 10)
+            vol = min(vol, 5)
+            if vol < 0: 
+                print("vol is negative", vol)
             # vol = 1
             if redeem_arb_SCP > 0:
                 await self.place_swap_order('fromSCP', vol)
@@ -163,7 +167,9 @@ class MyXchangeClient(xchange_client.XChangeClient):
             # vol = 1
             create_arb_JAK = 10 * self.state['JAK']['best_bid'][0] - 2 * self.state['EPT']['best_ask'][0] - 5 * self.state['DLO']['best_ask'][0] - 3 * self.state['MKU']['best_ask'][0]
             vol = min(self.state['JAK']['best_bid'][1]//10, self.state['EPT']['best_ask'][1]//2, self.state['DLO']['best_ask'][1]//5, self.state['MKU']['best_ask'][1]//3)
-            vol = min(vol, 10)
+            vol = min(vol, 5)
+            if vol < 0: 
+                print("vol is negative", vol)
             # print(create_arb_JAK)
             if create_arb_JAK > 0:
                 await self.place_swap_order('toJAK', vol)
@@ -175,7 +181,9 @@ class MyXchangeClient(xchange_client.XChangeClient):
 
             redeem_arb_JAK = -10 * self.state['JAK']['best_ask'][0] + 2 * self.state['EPT']['best_bid'][0] + 5 * self.state['DLO']['best_bid'][0] + 3 * self.state['MKU']['best_bid'][0]
             vol = min(self.state['JAK']['best_ask'][1]//10, self.state['EPT']['best_bid'][1]//2, self.state['DLO']['best_bid'][1]//5, self.state['MKU']['best_bid'][1]//3)
-            vol = min(vol, 10)
+            vol = min(vol, 5)
+            if vol < 0: 
+                print("vol is negative", vol)
             # print(redeem_arb_JAK)
             if redeem_arb_JAK > 0:
                 await self.place_swap_order('fromJAK', vol)
@@ -258,25 +266,33 @@ class MyXchangeClient(xchange_client.XChangeClient):
                 print(f"Asks for {security}:\n{sorted_asks}")
 
     async def clear_pos(self):
-        
+        '''
         for order in self.open_orders:
             print("Cancelling order", order)
             await self.cancel_order(order)
+        '''
 
         # await asyncio.sleep(1)
+        print("CLEARING POS CLEARING POS CLEARING POS CLEARING POS CLEARING POS CLEARING POS ")
         print("Pos", self.positions)
         for security, pos in self.positions.items():
             if security == 'cash':
                 continue
             print(security, pos)
             if pos > 0:
-                for i in range(pos):
-                    await self.place_order(security, 1, xchange_client.Side.SELL)
+                lots = pos//40
+                rem = pos%40
+                for i in range(lots):
+                    await self.place_order(security, 40, xchange_client.Side.SELL)
+                await self.place_order(security, rem, xchange_client.Side.SELL)
             elif pos < 0:
-                for i in range(-pos):
-                    await self.place_order(security, 1, xchange_client.Side.BUY)
-            
-            print("Cleared positions", self.positions)
+                lots = (-pos)//40
+                rem = (-pos)%40
+                for i in range(lots):
+                    await self.place_order(security, 40, xchange_client.Side.BUY)
+                await self.place_order(security, rem, xchange_client.Side.BUY)
+        await asyncio.sleep(1)    
+        print("Cleared positions", self.positions)
                 
     async def start(self):
         """
@@ -284,8 +300,8 @@ class MyXchangeClient(xchange_client.XChangeClient):
         and listens for messages.
         """
         
-        # asyncio.create_task(self.arbitrage())
-        asyncio.create_task(self.market_making())
+        asyncio.create_task(self.arbitrage())
+        # asyncio.create_task(self.market_making())
         await self.connect()
 
 
