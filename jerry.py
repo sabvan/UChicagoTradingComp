@@ -48,7 +48,7 @@ class MyXchangeClient(xchange_client.XChangeClient):
                 continue
             symbol = order_request.symbol
             side = order_request.side
-            # print(order_request.limit)
+            print(order_request.limit)
             px = order_request.limit.px
             qty = order_request.limit.qty
 
