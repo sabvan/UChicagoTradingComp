@@ -291,7 +291,7 @@ class MyXchangeClient(xchange_client.XChangeClient):
                 for i in range(lots):
                     await self.place_order(security, 40, xchange_client.Side.BUY)
                 await self.place_order(security, rem, xchange_client.Side.BUY)
-        await asyncio.sleep(1)    
+        await asyncio.sleep(1) 
         print("Cleared positions", self.positions)
                 
     async def start(self):
@@ -306,7 +306,8 @@ class MyXchangeClient(xchange_client.XChangeClient):
 
 
 async def main():
-    SERVER = 'staging.uchicagotradingcompetition.com:3333' # run on sandbox
+    # SERVER = 'staging.uchicagotradingcompetition.com:3333' # run on sandbox
+    SERVER = "dayof.uchicagotradingcompetition.com:3001"
     my_client = MyXchangeClient(SERVER, "princeton","nidoqueen-chansey-9131")
     await my_client.start()
     return
