@@ -1,5 +1,5 @@
 # UChicago Trading Competition Code
-This repository has Princeton's code for the 2024 UChicago Trading Competition, which earned 2nd place for case 1, 6th place for case 2, 
+This repository has Princeton's code for the 2024 UChicago Trading Competition, which earned 2nd place for case 1, top 10 (exact place not known) for case 2, 
 and 2nd place for the overall competition (out of 40 teams). The team consisted of Sabrina Van, Jerry Han, Arjun Menon, and Emily Gai. 
 
 ## Case 1
